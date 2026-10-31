@@ -1,0 +1,266 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(uuid())
+  name       String
+  email      String   @unique
+  password   String
+  role       UserRole @default(customer)
+  address    String?
+  profileImg String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reviews  Review[]
+  blogs    Blog[]
+  services Service[]
+
+  @@map("users")
+}
+
+model Service {
+  id               String   @id @default(uuid())
+  appointment_date DateTime
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  deviceType       String
+  issueDescription String
+
+  technician         String?
+  technicianId       String?
+  assignedTechnician Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+
+  trackingNumber    String? @unique
+  customerPhone     String?
+  intakeCondition   String?
+  intakeAccessories String?
+  intakeNotes       String?
+
+  diagnosis     String?
+  repairActions String?
+
+  quoteAmount Int?
+  quoteStatus QuoteStatus @default(not_requested)
+
+  estimated_completion_time DateTime?
+  pickup_date               DateTime?
+  status                    ServiceStatus @default(scheduled)
+  isPaid                    Boolean       @default(false)
+  isReady                   Boolean       @default(false)
+  isFixed                   Boolean       @default(false)
+  deviceIssue               String?
+  img                       String?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  order         Order?
+  statusHistory ServiceStatusHistory[]
+  parts         ServicePartRequirement[]
+
+  @@index([technicianId])
+  @@index([status])
+  @@map("services")
+}
+
+model ServiceStatusHistory {
+  id        String        @id @default(uuid())
+  serviceId String
+  service   Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  status    ServiceStatus
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([serviceId, createdAt])
+  @@map("service_status_history")
+}
+
+model Technician {
+  id        String    @id @default(uuid())
+  name      String
+  phone     String?
+  specialty String?
+  isActive  Boolean   @default(true)
+  services  Service[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([name])
+  @@map("technicians")
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("reviews")
+}
+
+model Blog {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  img         String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("blogs")
+}
+
+model Order {
+  id              String   @id @default(uuid())
+  hardware        Int?
+  software        Int?
+  parts           String?
+  technician_bill Int?
+  totalAmount     Int?
+  tax             Int?
+  oversarbation   String?
+  invoiceNumber   String?  @unique
+  serviceId       String   @unique
+  isPaid          Boolean  @default(false)
+  service         Service  @relation(fields: [serviceId], references: [id])
+  payments        Payment[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("orders")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amount          Int
+  method          PaymentMethod
+  reference       String?
+  stripeSessionId String?       @unique
+  note            String?
+  receivedById    String?
+  createdAt       DateTime      @default(now())
+
+  @@index([orderId, createdAt])
+  @@map("payments")
+}
+
+enum UserRole {
+  admin
+  customer
+  super_admin
+}
+
+enum ServiceStatus {
+  in_progress
+  awaiting_parts
+  on_hold
+  ready_for_pickup
+  completed
+  fixed
+  scheduled
+  payment_pending
+  dispatched
+  assignToTechnican
+}
+
+enum QuoteStatus {
+  not_requested
+  pending
+  approved
+  rejected
+}
+
+enum InventoryMovementType {
+  restock
+  adjustment_in
+  adjustment_out
+}
+
+enum ServicePartStatus {
+  requested
+  unavailable
+  partially_reserved
+  reserved
+}
+
+enum PaymentMethod {
+  cash
+  bank_transfer
+  card
+  other
+}
+
+model SparePart {
+  id               String   @id @default(uuid())
+  code             String   @unique
+  name             String
+  description      String?
+  unitPrice        Int      @default(0)
+  quantityOnHand   Int      @default(0)
+  quantityReserved Int      @default(0)
+  minStock         Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  movements           InventoryMovement[]
+  serviceRequirements ServicePartRequirement[]
+
+  @@index([name])
+  @@index([isActive])
+  @@map("spare_parts")
+}
+
+model InventoryMovement {
+  id             String                @id @default(uuid())
+  sparePartId    String
+  sparePart      SparePart             @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  type           InventoryMovementType
+  quantityChange Int
+  quantityBefore Int
+  quantityAfter  Int
+  note           String?
+  createdById    String?
+  createdAt      DateTime              @default(now())
+
+  @@index([sparePartId, createdAt])
+  @@map("inventory_movements")
+}
+
+model ServicePartRequirement {
+  id                String            @id @default(uuid())
+  serviceId         String
+  service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  sparePartId       String?
+  sparePart         SparePart?        @relation(fields: [sparePartId], references: [id], onDelete: SetNull)
+
+  requestedPartName String
+  requestedCode     String?
+  quantityRequired  Int
+  quantityReserved  Int               @default(0)
+  unitPrice         Int?
+  status            ServicePartStatus @default(requested)
+  note              String?
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([serviceId])
+  @@index([sparePartId])
+  @@index([status])
+  @@map("service_part_requirements")
+}
